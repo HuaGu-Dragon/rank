@@ -6,6 +6,7 @@ use gpui_component::{
     ActiveTheme, Sizable, Size, StyleSized, StyledExt,
     button::Button,
     h_flex,
+    label::Label,
     table::{Column, ColumnFixed, ColumnGroup, DataTable, TableDelegate, TableState},
     v_flex,
 };
@@ -222,14 +223,14 @@ impl TableDelegate for Table {
             }
             "state" => {
                 if data.finish {
-                    div()
-                        .child("Finish")
-                        .when(col.align == TextAlign::Center, |this| this.text_center())
+                    Label::new("Finish")
+                        .text_center()
+                        .text_color(cx.theme().green)
                         .into_any_element()
                 } else {
-                    div()
-                        .child("Running")
-                        .when(col.align == TextAlign::Center, |this| this.text_center())
+                    Label::new("Running")
+                        .text_center()
+                        .text_color(cx.theme().info)
                         .into_any_element()
                 }
             }
