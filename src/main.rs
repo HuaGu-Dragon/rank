@@ -1,21 +1,17 @@
 use gpui::*;
-use gpui_component::{
-    Root, TitleBar,
-    button::{Button, ButtonVariants},
-    h_flex,
-    menu::AppMenuBar,
-    v_flex,
-};
+use gpui_component::{Root, TitleBar, h_flex, menu::AppMenuBar, v_flex};
 
 mod menu;
+mod table;
 mod themes;
 
 pub struct Example {
     menu: Entity<AppMenuBar>,
+    table: Entity<table::TableView>,
 }
 
 impl Render for Example {
-    fn render(&mut self, _: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .size_full()
             .child(
@@ -35,13 +31,7 @@ impl Render for Example {
                     .size_full()
                     .items_center()
                     .justify_center()
-                    .child("Hello, World!")
-                    .child(
-                        Button::new("ok")
-                            .primary()
-                            .label("Let's Go!")
-                            .on_click(|_, _, _| println!("Clicked!")),
-                    ),
+                    .child(self.table.clone()),
             )
     }
 }
@@ -65,7 +55,8 @@ fn main() {
 
             cx.open_window(window_options, |window, cx| {
                 let menu = menu::init("rank", cx);
-                let view = cx.new(|_| Example { menu });
+                let table = table::TableView::view(window, cx);
+                let view = cx.new(|_| Example { menu, table });
                 cx.new(|cx| Root::new(view, window, cx))
             })
             .expect("Failed to open window");

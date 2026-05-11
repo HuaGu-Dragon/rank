@@ -8,3 +8,4 @@ gpui = { git = "https://github.com/zed-industries/zed", features = ["wayland"] }
 gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit", "wayland"] }
 gpui-component = { git = "https://github.com/longbridge/gpui-component" }
 gpui-component-assets = { git = "https://github.com/longbridge/gpui-component" }
+seq-macro = "0.3.6"
