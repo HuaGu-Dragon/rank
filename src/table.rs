@@ -1,6 +1,8 @@
-use gpui::{App, AppContext, Context, Entity, ParentElement, Render, Styled, Window};
+use gpui::{App, AppContext, Context, Entity, ParentElement, Render, Styled, Window, div};
 use gpui_component::{
     Sizable, Size,
+    button::Button,
+    h_flex,
     table::{Column, ColumnGroup, DataTable, TableDelegate, TableState},
     v_flex,
 };
@@ -25,29 +27,69 @@ struct Data {
     allocation: [usize; RESOURCE_COUNT],
     max: [usize; RESOURCE_COUNT],
     need: [usize; RESOURCE_COUNT],
-    available: Option<[usize; RESOURCE_COUNT]>,
     finish: bool,
 }
 
 struct Table {
     data: Vec<Data>,
     columns: Vec<Column>,
+    global_available: [usize; RESOURCE_COUNT],
+    step_index: usize,
+    finished_count: usize,
 }
 
 impl Table {
     pub fn new() -> Self {
-        Self {
-            data: vec![Data {
-                id: 1,
-                name: "process_01".to_string(),
-                allocation: [0; RESOURCE_COUNT],
-                max: [0; RESOURCE_COUNT],
-                need: [0; RESOURCE_COUNT],
-                available: None,
+        let data = vec![
+            Data {
+                id: 0,
+                name: "P0".to_string(),
+                allocation: [0, 1, 0],
+                max: [7, 5, 3],
+                need: [7, 4, 3],
                 finish: false,
-            }],
+            },
+            Data {
+                id: 1,
+                name: "P1".to_string(),
+                allocation: [2, 0, 0],
+                max: [3, 2, 2],
+                need: [1, 2, 2],
+                finish: false,
+            },
+            Data {
+                id: 2,
+                name: "P2".to_string(),
+                allocation: [3, 0, 2],
+                max: [9, 0, 2],
+                need: [6, 0, 2],
+                finish: false,
+            },
+            Data {
+                id: 3,
+                name: "P3".to_string(),
+                allocation: [2, 1, 1],
+                max: [2, 2, 2],
+                need: [0, 1, 1],
+                finish: false,
+            },
+            Data {
+                id: 4,
+                name: "P4".to_string(),
+                allocation: [0, 0, 2],
+                max: [4, 3, 3],
+                need: [4, 3, 1],
+                finish: false,
+            },
+        ];
+
+        Self {
+            data,
+            global_available: [3, 3, 2],
+            step_index: 0,
+            finished_count: 0,
             columns: {
-                let mut cols = Vec::with_capacity(2 + 4 * RESOURCE_COUNT + 1);
+                let mut cols = Vec::with_capacity(2 + 3 * RESOURCE_COUNT + 1);
 
                 cols.extend([
                     Column::new("id", "Process").width(80.),
@@ -65,9 +107,6 @@ impl Table {
                         seq_macro::seq!(NUM in 0..$nproc {
                             cols.push(Column::new(concat!("need_", stringify!(NUM)), stringify!(NUM)).width(50.).sortable());
                         });
-                        seq_macro::seq!(NUM in 0..$nproc {
-                            cols.push(Column::new(concat!("available_", stringify!(NUM)), stringify!(NUM)).width(50.).sortable());
-                        });
                     }
                 }
 
@@ -76,6 +115,28 @@ impl Table {
                 cols.push(Column::new("state", "state").width(100.));
                 cols
             },
+        }
+    }
+
+    pub fn reset(&mut self) {
+        *self = Self::new();
+    }
+
+    pub fn step(&mut self) {
+        if self.finished_count == self.data.len() {
+            return;
+        }
+
+        if let Some(p) = self
+            .data
+            .iter_mut()
+            .find(|p| !p.finish && p.need <= self.global_available)
+        {
+            for j in 0..RESOURCE_COUNT {
+                self.global_available[j] += p.allocation[j];
+            }
+            self.step_index += 1;
+            p.finish = true;
         }
     }
 }
@@ -99,7 +160,6 @@ impl TableDelegate for Table {
             ColumnGroup::new("Allocation", RESOURCE_COUNT),
             ColumnGroup::new("Max", RESOURCE_COUNT),
             ColumnGroup::new("Need", RESOURCE_COUNT),
-            ColumnGroup::new("Available", RESOURCE_COUNT),
         ]])
     }
 
@@ -128,14 +188,6 @@ impl TableDelegate for Table {
                 let idx: usize = k.trim_start_matches("need_").parse().unwrap();
                 row.need[idx].to_string()
             }
-            k if k.starts_with("available") => {
-                if let Some(a) = row.available {
-                    let idx: usize = k.trim_start_matches("available_").parse().unwrap();
-                    a[idx].to_string()
-                } else {
-                    "".into()
-                }
-            }
             "state" => {
                 if row.finish {
                     "Finished".to_string()
@@ -163,19 +215,64 @@ impl TableView {
 
         Self { table }
     }
+
+    fn on_step(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        self.table.update(cx, |table, cx| {
+            table.delegate_mut().step();
+            cx.notify();
+        });
+    }
+
+    fn on_reset(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        self.table.update(cx, |table, cx| {
+            table.delegate_mut().reset();
+            cx.notify();
+        });
+    }
 }
 
 impl Render for TableView {
     fn render(
         &mut self,
         _window: &mut gpui::Window,
-        _cx: &mut gpui::Context<Self>,
+        cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
-        v_flex().size_full().text_sm().gap_4().child(
-            DataTable::new(&self.table)
-                .stripe(false)
-                .scrollbar_visible(true, true)
-                .with_size(Size::Large),
-        )
+        let global_available = self.table.read(cx).delegate().global_available;
+
+        v_flex()
+            .size_full()
+            .p_6()
+            .text_lg()
+            .gap_6()
+            .child(
+                h_flex()
+                    .gap_4()
+                    .items_center()
+                    .child(Button::new("step_btn").label("Step").on_click(cx.listener(
+                        |this, _ev, window, cx| {
+                            this.on_step(window, cx);
+                        },
+                    )))
+                    .child(
+                        Button::new("reset_btn")
+                            .label("Reset")
+                            .on_click(cx.listener(|this, _ev, window, cx| {
+                                this.on_reset(window, cx);
+                            })),
+                    )
+                    .child(
+                        div()
+                            .ml_6()
+                            .text_xl()
+                            .font_weight(gpui::FontWeight::BOLD)
+                            .child(format!("Global Available: {:?}", global_available)),
+                    ),
+            )
+            .child(
+                DataTable::new(&self.table)
+                    .stripe(true)
+                    .scrollbar_visible(true, true)
+                    .with_size(Size::Large),
+            )
     }
 }
