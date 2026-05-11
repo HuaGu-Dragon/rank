@@ -47,10 +47,12 @@ impl Table {
                 finish: false,
             }],
             columns: {
-                let mut cols = vec![
+                let mut cols = Vec::with_capacity(2 + 4 * RESOURCE_COUNT + 1);
+
+                cols.extend([
                     Column::new("id", "Process").width(80.),
                     Column::new("name", "Name").width(150.),
-                ];
+                ]);
 
                 macro_rules! push_resource_columns {
                     ($nproc:literal) => {
