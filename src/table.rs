@@ -1,9 +1,12 @@
-use gpui::{App, AppContext, Context, Entity, ParentElement, Render, Styled, Window, div};
+use gpui::{
+    AnyElement, App, AppContext, Context, Entity, IntoElement, ParentElement, Render, Styled,
+    TextAlign, Window, div, prelude::FluentBuilder,
+};
 use gpui_component::{
-    Sizable, Size,
+    ActiveTheme, Sizable, Size, StyleSized, StyledExt,
     button::Button,
     h_flex,
-    table::{Column, ColumnGroup, DataTable, TableDelegate, TableState},
+    table::{Column, ColumnFixed, ColumnGroup, DataTable, TableDelegate, TableState},
     v_flex,
 };
 
@@ -92,27 +95,33 @@ impl Table {
                 let mut cols = Vec::with_capacity(2 + 3 * RESOURCE_COUNT + 1);
 
                 cols.extend([
-                    Column::new("id", "Process").width(80.),
-                    Column::new("name", "Name").width(150.),
+                    Column::new("id", "Process")
+                        .fixed(ColumnFixed::Left)
+                        .text_center()
+                        .width(80.),
+                    Column::new("name", "Name")
+                        .fixed(ColumnFixed::Left)
+                        .resizable(true)
+                        .width(150.),
                 ]);
 
                 macro_rules! push_resource_columns {
                     ($nproc:literal) => {
                         seq_macro::seq!(NUM in 0..$nproc {
-                            cols.push(Column::new(concat!("allocation_", stringify!(NUM)), stringify!(NUM)).width(50.).sortable());
+                            cols.push(Column::new(concat!("allocation_", stringify!(NUM)), stringify!(NUM)).width(50.).text_right().p_0().sortable());
                         });
                         seq_macro::seq!(NUM in 0..$nproc {
-                            cols.push(Column::new(concat!("max_", stringify!(NUM)), stringify!(NUM)).width(50.).sortable());
+                            cols.push(Column::new(concat!("max_", stringify!(NUM)), stringify!(NUM)).width(50.).text_right().p_0().sortable());
                         });
                         seq_macro::seq!(NUM in 0..$nproc {
-                            cols.push(Column::new(concat!("need_", stringify!(NUM)), stringify!(NUM)).width(50.).sortable());
+                            cols.push(Column::new(concat!("need_", stringify!(NUM)), stringify!(NUM)).width(50.).text_right().p_0().sortable());
                         });
                     }
                 }
 
                 pass_nproc!(push_resource_columns);
 
-                cols.push(Column::new("state", "state").width(100.));
+                cols.push(Column::new("state", "state").width(100.).text_center());
                 cols
             },
         }
@@ -138,6 +147,26 @@ impl Table {
             self.step_index += 1;
             p.finish = true;
         }
+    }
+
+    fn render_value_cell(&self, col: &Column, val: usize, idx: usize, cx: &mut App) -> AnyElement {
+        let this = div()
+            .h_full()
+            .table_cell_size(Size::Large)
+            .child(format!("{val}"));
+
+        let this = if val > self.global_available[idx] {
+            this.text_color(cx.theme().red)
+                .bg(cx.theme().red_light.alpha(0.05))
+        } else {
+            this.text_color(cx.theme().green)
+                .bg(cx.theme().green_light.alpha(0.05))
+        };
+
+        this.when(col.align == TextAlign::Right, |this| {
+            this.h_flex().justify_end()
+        })
+        .into_any_element()
     }
 }
 
@@ -168,35 +197,63 @@ impl TableDelegate for Table {
         row_ix: usize,
         col_ix: usize,
         _window: &mut gpui::Window,
-        _cx: &mut gpui::Context<gpui_component::table::TableState<Self>>,
+        cx: &mut gpui::Context<gpui_component::table::TableState<Self>>,
     ) -> impl gpui::IntoElement {
-        let row = &self.data[row_ix];
+        let data = &self.data[row_ix];
         let col = &self.columns[col_ix];
 
         match col.key.as_ref() {
-            "id" => row.id.to_string(),
-            "name" => row.name.clone(),
+            "id" => div()
+                .child(data.id.to_string())
+                .when(col.align == TextAlign::Center, |this| this.text_center())
+                .into_any_element(),
+            "name" => data.name.clone().into_any_element(),
             k if k.starts_with("allocation") => {
                 let idx: usize = k.trim_start_matches("allocation_").parse().unwrap();
-                row.allocation[idx].to_string()
+                self.render_value_cell(col, data.allocation[idx], idx, cx)
             }
             k if k.starts_with("max") => {
                 let idx: usize = k.trim_start_matches("max_").parse().unwrap();
-                row.max[idx].to_string()
+                self.render_value_cell(col, data.max[idx], idx, cx)
             }
             k if k.starts_with("need") => {
                 let idx: usize = k.trim_start_matches("need_").parse().unwrap();
-                row.need[idx].to_string()
+                self.render_value_cell(col, data.need[idx], idx, cx)
             }
             "state" => {
-                if row.finish {
-                    "Finished".to_string()
+                if data.finish {
+                    div()
+                        .child("Finish")
+                        .when(col.align == TextAlign::Center, |this| this.text_center())
+                        .into_any_element()
                 } else {
-                    "Running".to_string()
+                    div()
+                        .child("Running")
+                        .when(col.align == TextAlign::Center, |this| this.text_center())
+                        .into_any_element()
                 }
             }
-            _ => "".to_string(),
+            _ => "".to_string().into_any_element(),
         }
+    }
+
+    fn render_th(
+        &mut self,
+        col_ix: usize,
+        _window: &mut Window,
+        cx: &mut Context<TableState<Self>>,
+    ) -> impl IntoElement {
+        let col = self.column(col_ix, cx);
+
+        div()
+            .child(col.name.clone())
+            .when(col_ix >= 2, |this| this.table_cell_size(Size::Large))
+            .when(col.align == TextAlign::Center, |this| {
+                this.h_flex().w_full().justify_center()
+            })
+            .when(col.align == TextAlign::Right, |this| {
+                this.h_flex().w_full().justify_end()
+            })
     }
 }
 
