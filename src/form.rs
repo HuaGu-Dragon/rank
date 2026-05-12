@@ -72,7 +72,7 @@ impl FormView {
         Ok(result)
     }
 
-    fn submit(&mut self, cx: &mut Context<Self>) {
+    pub fn submit(&mut self, cx: &mut Context<Self>) {
         let name = self.name_input.read(cx).value().to_string();
         if name.is_empty() {
             cx.emit(FormEvent::Invalid(

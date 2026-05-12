@@ -3,7 +3,7 @@ use gpui::{
     TextAlign, Window, div, prelude::FluentBuilder,
 };
 use gpui_component::{
-    ActiveTheme, Sizable, Size, StyleSized, StyledExt,
+    ActiveTheme, Root, Sizable, Size, StyleSized, StyledExt,
     button::Button,
     h_flex,
     label::Label,
@@ -11,7 +11,7 @@ use gpui_component::{
     v_flex,
 };
 
-use crate::form;
+use crate::{alert, form};
 
 macro_rules! pass_nproc {
     ($mac:ident) => {
@@ -262,7 +262,7 @@ impl TableDelegate for Table {
 
 pub struct TableView {
     table: Entity<TableState<Table>>,
-    form: Entity<form::FormView>,
+    alert: Entity<alert::AlertView>,
 }
 
 impl TableView {
@@ -275,6 +275,8 @@ impl TableView {
         let table = cx.new(|cx| TableState::new(delegate, window, cx));
 
         let form = form::FormView::view(window, cx);
+
+        let alert = alert::AlertView::view(form.clone(), window, cx);
 
         cx.subscribe(&form, |this, _emitter, ev: &form::FormEvent, cx| match ev {
             form::FormEvent::Submit {
@@ -305,7 +307,7 @@ impl TableView {
         })
         .detach();
 
-        Self { table, form }
+        Self { table, alert }
     }
 
     fn on_step(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
@@ -326,9 +328,10 @@ impl TableView {
 impl Render for TableView {
     fn render(
         &mut self,
-        _window: &mut gpui::Window,
+        window: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
+        let dialog_layer = Root::render_dialog_layer(window, cx);
         let global_available = self.table.read(cx).delegate().global_available;
 
         v_flex()
@@ -352,6 +355,7 @@ impl Render for TableView {
                                 this.on_reset(window, cx);
                             })),
                     )
+                    .child(self.alert.clone())
                     .child(
                         div()
                             .ml_6()
@@ -366,6 +370,6 @@ impl Render for TableView {
                     .scrollbar_visible(true, true)
                     .with_size(Size::Large),
             )
-            .child(self.form.clone())
+            .children(dialog_layer)
     }
 }
