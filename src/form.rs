@@ -23,7 +23,6 @@ pub struct DataForm {
     name_input: Entity<InputState>,
     allocation_inputs: [Entity<InputState>; RESOURCE_COUNT],
     max_inputs: [Entity<InputState>; RESOURCE_COUNT],
-    need_inputs: [Entity<InputState>; RESOURCE_COUNT],
 }
 
 pub struct ResForm {
@@ -44,15 +43,12 @@ impl DataForm {
             std::array::from_fn(|_| cx.new(|cx| InputState::new(window, cx).placeholder("0")));
         let max_inputs =
             std::array::from_fn(|_| cx.new(|cx| InputState::new(window, cx).placeholder("0")));
-        let need_inputs =
-            std::array::from_fn(|_| cx.new(|cx| InputState::new(window, cx).placeholder("0")));
 
         Self {
             focus_handle: cx.focus_handle(),
             name_input,
             allocation_inputs,
             max_inputs,
-            need_inputs,
         }
     }
 
@@ -94,18 +90,13 @@ impl DataForm {
             }
         };
 
-        let need = match Self::parse_inputs(cx, &self.need_inputs) {
-            Ok(v) => v,
-            Err(e) => {
-                return Err(format!("Need: {}", e).into());
-            }
-        };
-
         for i in 0..RESOURCE_COUNT {
-            if need[i] > max[i] {
-                return Err("Need cannot be greater than Max".into());
+            if allocation[i] > max[i] {
+                return Err("Allocation cannot be greater than Max".into());
             }
         }
+
+        let need = std::array::from_fn(|i| max[i] - allocation[i]);
 
         cx.emit(FormEvent::Submit(vec![Proc {
             name,
@@ -202,13 +193,6 @@ impl Render for DataForm {
                     h_flex()
                         .gap_2()
                         .children(self.max_inputs.iter().map(Input::new)),
-                ),
-            )
-            .child(
-                field().label("Need").child(
-                    h_flex()
-                        .gap_2()
-                        .children(self.need_inputs.iter().map(Input::new)),
                 ),
             )
     }
