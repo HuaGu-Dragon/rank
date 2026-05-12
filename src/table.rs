@@ -25,7 +25,7 @@ use crate::{
 
 macro_rules! pass_nproc {
     ($mac:ident) => {
-        $mac! { 3 }
+        $mac! { 6 }
     };
 }
 
@@ -256,6 +256,62 @@ impl TableDelegate for Table {
                 }
             }
             _ => "".to_string().into_any_element(),
+        }
+    }
+
+    fn perform_sort(
+        &mut self,
+        col_ix: usize,
+        sort: gpui_component::table::ColumnSort,
+        _window: &mut Window,
+        _cx: &mut Context<TableState<Self>>,
+    ) {
+        let col = &self.columns[col_ix];
+
+        match col.key.as_ref() {
+            k if k.starts_with("allocation") => {
+                let idx: usize = k.trim_start_matches("allocation_").parse().unwrap();
+                match sort {
+                    gpui_component::table::ColumnSort::Default => {
+                        self.data.sort_unstable_by_key(|a| a.id)
+                    }
+                    gpui_component::table::ColumnSort::Ascending => self
+                        .data
+                        .sort_by(|a, b| a.allocation[idx].cmp(&b.allocation[idx])),
+                    gpui_component::table::ColumnSort::Descending => self
+                        .data
+                        .sort_by(|a, b| b.allocation[idx].cmp(&a.allocation[idx])),
+                }
+            }
+            k if k.starts_with("max") => {
+                let idx: usize = k.trim_start_matches("max_").parse().unwrap();
+                match sort {
+                    gpui_component::table::ColumnSort::Default => {
+                        self.data.sort_unstable_by_key(|a| a.id)
+                    }
+                    gpui_component::table::ColumnSort::Ascending => {
+                        self.data.sort_by(|a, b| a.max[idx].cmp(&b.max[idx]))
+                    }
+                    gpui_component::table::ColumnSort::Descending => {
+                        self.data.sort_by(|a, b| b.max[idx].cmp(&a.max[idx]))
+                    }
+                }
+            }
+            k if k.starts_with("need") => {
+                let idx: usize = k.trim_start_matches("need_").parse().unwrap();
+                match sort {
+                    gpui_component::table::ColumnSort::Default => {
+                        self.data.sort_unstable_by_key(|a| a.id)
+                    }
+                    gpui_component::table::ColumnSort::Ascending => {
+                        self.data.sort_by(|a, b| a.need[idx].cmp(&b.need[idx]))
+                    }
+                    gpui_component::table::ColumnSort::Descending => {
+                        self.data.sort_by(|a, b| b.need[idx].cmp(&a.need[idx]))
+                    }
+                }
+            }
+            _ => {}
         }
     }
 
