@@ -11,6 +11,8 @@ use gpui_component::{
     v_flex,
 };
 
+use crate::form;
+
 macro_rules! pass_nproc {
     ($mac:ident) => {
         $mac! { 3 }
@@ -23,7 +25,7 @@ macro_rules! literal_identity_macro {
     };
 }
 
-const RESOURCE_COUNT: usize = pass_nproc!(literal_identity_macro);
+pub const RESOURCE_COUNT: usize = pass_nproc!(literal_identity_macro);
 
 struct Data {
     id: usize,
@@ -260,6 +262,7 @@ impl TableDelegate for Table {
 
 pub struct TableView {
     table: Entity<TableState<Table>>,
+    form: Entity<form::FormView>,
 }
 
 impl TableView {
@@ -271,7 +274,38 @@ impl TableView {
         let delegate = Table::new();
         let table = cx.new(|cx| TableState::new(delegate, window, cx));
 
-        Self { table }
+        let form = form::FormView::view(window, cx);
+
+        cx.subscribe(&form, |this, _emitter, ev: &form::FormEvent, cx| match ev {
+            form::FormEvent::Submit {
+                name,
+                allocation,
+                max,
+                need,
+            } => {
+                this.table.update(cx, |table, cx| {
+                    let delegate = table.delegate_mut();
+                    delegate.data.push(Data {
+                        id: delegate.data.len(),
+                        name: name.clone(),
+                        allocation: *allocation,
+                        max: *max,
+                        need: *need,
+                        finish: false,
+                    });
+                    cx.notify();
+                });
+            }
+            form::FormEvent::Cancel => {
+                println!("Form cancelled");
+            }
+            form::FormEvent::Invalid(reason) => {
+                println!("Invalid form input: {}", reason);
+            }
+        })
+        .detach();
+
+        Self { table, form }
     }
 
     fn on_step(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
@@ -332,5 +366,6 @@ impl Render for TableView {
                     .scrollbar_visible(true, true)
                     .with_size(Size::Large),
             )
+            .child(self.form.clone())
     }
 }

@@ -1,8 +1,9 @@
 use gpui::*;
 use gpui_component::{Root, TitleBar, h_flex, menu::AppMenuBar, v_flex};
 
+pub mod form;
 mod menu;
-mod table;
+pub mod table;
 mod themes;
 
 pub struct Example {
