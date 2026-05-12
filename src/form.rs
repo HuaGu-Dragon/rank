@@ -8,15 +8,10 @@ use gpui_component::{
     input::{Input, InputState},
 };
 
-use crate::table::RESOURCE_COUNT;
+use crate::table::{Proc, RESOURCE_COUNT};
 
 pub enum FormEvent {
-    Submit {
-        name: String,
-        allocation: [usize; RESOURCE_COUNT],
-        max: [usize; RESOURCE_COUNT],
-        need: [usize; RESOURCE_COUNT],
-    },
+    Submit(Vec<Proc>),
     Invalid(String),
 }
 
@@ -112,12 +107,12 @@ impl FormView {
             }
         }
 
-        cx.emit(FormEvent::Submit {
+        cx.emit(FormEvent::Submit(vec![Proc {
             name,
             allocation,
             max,
             need,
-        });
+        }]));
 
         true
     }

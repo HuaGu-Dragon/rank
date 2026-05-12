@@ -37,9 +37,20 @@ struct Data {
     finish: bool,
 }
 
-impl Data {
-    pub fn random_data(id: usize, max: &[usize; RESOURCE_COUNT]) -> Self {
-        let name = format!("process_{id}");
+#[derive(Clone)]
+pub struct Proc {
+    pub name: String,
+    pub allocation: [usize; RESOURCE_COUNT],
+    pub max: [usize; RESOURCE_COUNT],
+    pub need: [usize; RESOURCE_COUNT],
+}
+
+impl Proc {
+    pub fn random_data(
+        id: usize,
+        available: &[usize; RESOURCE_COUNT],
+        total: &[usize; RESOURCE_COUNT],
+    ) -> Self {
         let mut rng = rand::rng();
 
         let mut process_max = [0; RESOURCE_COUNT];
@@ -47,26 +58,27 @@ impl Data {
         let mut need = [0; RESOURCE_COUNT];
 
         for i in 0..RESOURCE_COUNT {
-            process_max[i] = if max[i] > 0 {
-                rng.random_range(0..=max[i])
+            process_max[i] = if total[i] > 0 {
+                rng.random_range(0..=total[i])
             } else {
                 0
             };
-            allocation[i] = if process_max[i] > 0 {
-                rng.random_range(0..=process_max[i])
+
+            let max_alloc = std::cmp::min(process_max[i], available[i]);
+            allocation[i] = if max_alloc > 0 {
+                rng.random_range(0..=max_alloc)
             } else {
                 0
             };
+
             need[i] = process_max[i] - allocation[i];
         }
 
-        Data {
-            id,
-            name,
+        Self {
+            name: format!("P{id}"),
             allocation,
             max: process_max,
             need,
-            finish: false,
         }
     }
 }
@@ -75,58 +87,20 @@ struct Table {
     data: Vec<Data>,
     columns: Vec<Column>,
     global_available: [usize; RESOURCE_COUNT],
+    total_resources: [usize; RESOURCE_COUNT],
     step_index: usize,
     finished_count: usize,
 }
 
 impl Table {
     pub fn new() -> Self {
-        let data = vec![
-            Data {
-                id: 0,
-                name: "P0".to_string(),
-                allocation: [0, 1, 0],
-                max: [7, 5, 3],
-                need: [7, 4, 3],
-                finish: false,
-            },
-            Data {
-                id: 1,
-                name: "P1".to_string(),
-                allocation: [2, 0, 0],
-                max: [3, 2, 2],
-                need: [1, 2, 2],
-                finish: false,
-            },
-            Data {
-                id: 2,
-                name: "P2".to_string(),
-                allocation: [3, 0, 2],
-                max: [9, 0, 2],
-                need: [6, 0, 2],
-                finish: false,
-            },
-            Data {
-                id: 3,
-                name: "P3".to_string(),
-                allocation: [2, 1, 1],
-                max: [2, 2, 2],
-                need: [0, 1, 1],
-                finish: false,
-            },
-            Data {
-                id: 4,
-                name: "P4".to_string(),
-                allocation: [0, 0, 2],
-                max: [4, 3, 3],
-                need: [4, 3, 1],
-                finish: false,
-            },
-        ];
+        let global_available = [3, 3, 2];
+        let total_resources = global_available;
 
         Self {
-            data,
-            global_available: [3, 3, 2],
+            data: vec![],
+            global_available,
+            total_resources,
             step_index: 0,
             finished_count: 0,
             columns: {
@@ -314,24 +288,9 @@ impl TableView {
         let alert = alert::AlertView::view(form.clone(), window, cx);
 
         cx.subscribe(&form, |this, _emitter, ev: &form::FormEvent, cx| match ev {
-            form::FormEvent::Submit {
-                name,
-                allocation,
-                max,
-                need,
-            } => {
-                this.table.update(cx, |table, cx| {
-                    let delegate = table.delegate_mut();
-                    delegate.data.push(Data {
-                        id: delegate.data.len(),
-                        name: name.clone(),
-                        allocation: *allocation,
-                        max: *max,
-                        need: *need,
-                        finish: false,
-                    });
-                    cx.notify();
-                });
+            form::FormEvent::Submit(proc) => {
+                proc.iter()
+                    .for_each(|data| this.push_proc(data.clone(), cx));
             }
             form::FormEvent::Invalid(reason) => {
                 println!("Invalid form input: {}", reason);
@@ -340,6 +299,28 @@ impl TableView {
         .detach();
 
         Self { table, alert }
+    }
+
+    fn push_proc(&mut self, data: Proc, cx: &mut Context<Self>) {
+        self.table.update(cx, |table, cx| {
+            let delegate = table.delegate_mut();
+
+            for i in 0..RESOURCE_COUNT {
+                if delegate.global_available[i] >= data.allocation[i] {
+                    delegate.global_available[i] -= data.allocation[i];
+                }
+            }
+
+            delegate.data.push(Data {
+                id: delegate.data.len(),
+                name: data.name,
+                allocation: data.allocation,
+                max: data.max,
+                need: data.need,
+                finish: false,
+            });
+            cx.notify();
+        });
     }
 
     fn on_step(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
@@ -385,6 +366,19 @@ impl Render for TableView {
                             .label("Reset")
                             .on_click(cx.listener(|this, _ev, window, cx| {
                                 this.on_reset(window, cx);
+                            })),
+                    )
+                    .child(
+                        Button::new("rand")
+                            .label("Random Gen")
+                            .on_click(cx.listener(move |this, _ev, _window, cx| {
+                                let table = this.table.read(cx).delegate();
+                                let total_resources = table.total_resources;
+                                let id = table.data.len();
+                                this.push_proc(
+                                    Proc::random_data(id, &global_available, &total_resources),
+                                    cx,
+                                );
                             })),
                     )
                     .child(self.alert.clone())
