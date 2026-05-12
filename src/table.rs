@@ -10,6 +10,7 @@ use gpui_component::{
     table::{Column, ColumnFixed, ColumnGroup, DataTable, TableDelegate, TableState},
     v_flex,
 };
+use rand::RngExt;
 
 use crate::{alert, form};
 
@@ -34,6 +35,40 @@ struct Data {
     max: [usize; RESOURCE_COUNT],
     need: [usize; RESOURCE_COUNT],
     finish: bool,
+}
+
+impl Data {
+    pub fn random_data(id: usize, max: &[usize; RESOURCE_COUNT]) -> Self {
+        let name = format!("process_{id}");
+        let mut rng = rand::rng();
+
+        let mut process_max = [0; RESOURCE_COUNT];
+        let mut allocation = [0; RESOURCE_COUNT];
+        let mut need = [0; RESOURCE_COUNT];
+
+        for i in 0..RESOURCE_COUNT {
+            process_max[i] = if max[i] > 0 {
+                rng.random_range(0..=max[i])
+            } else {
+                0
+            };
+            allocation[i] = if process_max[i] > 0 {
+                rng.random_range(0..=process_max[i])
+            } else {
+                0
+            };
+            need[i] = process_max[i] - allocation[i];
+        }
+
+        Data {
+            id,
+            name,
+            allocation,
+            max: process_max,
+            need,
+            finish: false,
+        }
+    }
 }
 
 struct Table {
