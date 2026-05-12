@@ -1,6 +1,6 @@
 use gpui::{
     AnyElement, App, AppContext, Context, Entity, IntoElement, ParentElement, Render, Styled,
-    TextAlign, Window, div, prelude::FluentBuilder,
+    TextAlign, Window, div, prelude::FluentBuilder, px,
 };
 use gpui_component::{
     ActiveTheme, IconName, Root, Sizable, Size, StyleSized, StyledExt, WindowExt,
@@ -9,9 +9,11 @@ use gpui_component::{
     label::Label,
     notification::NotificationType,
     popover::Popover,
+    resizable::{h_resizable, resizable_panel},
+    stepper::{Stepper, StepperItem},
     table::{Column, ColumnFixed, ColumnGroup, DataTable, TableDelegate, TableState},
-    v_flex,
 };
+
 use rand::RngExt;
 
 use crate::{
@@ -94,6 +96,7 @@ struct Table {
     global_available: [usize; RESOURCE_COUNT],
     total_resources: [usize; RESOURCE_COUNT],
     finished_count: usize,
+    finished_order: Vec<String>,
 }
 
 impl Table {
@@ -103,6 +106,7 @@ impl Table {
             global_available: Default::default(),
             total_resources: Default::default(),
             finished_count: 0,
+            finished_order: vec![],
             columns: {
                 let mut cols = Vec::with_capacity(2 + 3 * RESOURCE_COUNT + 1);
 
@@ -158,6 +162,7 @@ impl Table {
             }
             self.finished_count += 1;
             p.finish = true;
+            self.finished_order.push(p.name.clone());
             return Ok(());
         }
 
@@ -369,84 +374,109 @@ impl Render for TableView {
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
         let dialog_layer = Root::render_dialog_layer(window, cx);
-        let global_available = self.table.read(cx).delegate().global_available;
+        let table = self.table.read(cx).delegate();
+        let global_available = table.global_available;
+        let items = &table.finished_order;
 
-        v_flex()
-            .size_full()
-            .p_6()
-            .text_lg()
-            .gap_6()
+        h_resizable("layout")
             .child(
-                h_flex()
-                    .gap_4()
-                    .items_center()
+                resizable_panel()
+                    .v_flex()
+                    .size_full()
+                    .p_6()
+                    .text_lg()
+                    .gap_6()
                     .child(
-                        Button::new("step_btn")
-                            .icon(IconName::Play)
-                            .label("Step")
-                            .on_click(cx.listener(|this, _ev, window, cx| {
-                                this.on_step(window, cx);
-                            })),
-                    )
-                    .child(
-                        Button::new("reset_btn")
-                            .icon(IconName::Undo)
-                            .label("Reset")
-                            .on_click(cx.listener(|this, _ev, window, cx| {
-                                this.on_reset(window, cx);
-                            })),
-                    )
-                    .child(
-                        Button::new("rand")
-                            .icon(IconName::Cpu)
-                            .label("Random Gen")
-                            .on_click(cx.listener(move |this, _ev, _window, cx| {
-                                let table = this.table.read(cx).delegate();
-                                let total_resources = table.total_resources;
-                                let id = table.data.len();
-                                this.push_proc(
-                                    Proc::random_data(id, &global_available, &total_resources),
-                                    cx,
-                                );
-                            })),
-                    )
-                    .child(
-                        div()
-                            .child(self.alert.clone())
-                            .when(self.run, |d| d.invisible()),
-                    )
-                    .child(
-                        div()
-                            .ml_6()
-                            .text_xl()
-                            .font_weight(gpui::FontWeight::BOLD)
-                            .child(format!("Global Available: {:?}", global_available)),
-                    )
-                    .child(
-                        div()
+                        h_flex()
+                            .gap_4()
+                            .items_center()
                             .child(
-                                Popover::new("global_available")
-                                    .trigger(
-                                        Button::new("global_available_btn")
-                                            .outline()
-                                            .label("Modify"),
-                                    )
-                                    .open(self.form_popover_open)
-                                    .on_open_change(cx.listener(|this, open, _, cx| {
-                                        this.form_popover_open = *open;
-                                        cx.notify();
-                                    }))
-                                    .child(self.form.clone()),
+                                Button::new("step_btn")
+                                    .icon(IconName::Play)
+                                    .label("Step")
+                                    .on_click(cx.listener(|this, _ev, window, cx| {
+                                        this.on_step(window, cx);
+                                    })),
                             )
-                            .when(self.run, |d| d.invisible()),
-                    ),
+                            .child(
+                                Button::new("reset_btn")
+                                    .icon(IconName::Undo)
+                                    .label("Reset")
+                                    .on_click(cx.listener(|this, _ev, window, cx| {
+                                        this.on_reset(window, cx);
+                                    })),
+                            )
+                            .child(
+                                Button::new("rand")
+                                    .icon(IconName::Cpu)
+                                    .label("Random Gen")
+                                    .on_click(cx.listener(move |this, _ev, _window, cx| {
+                                        let table = this.table.read(cx).delegate();
+                                        let total_resources = table.total_resources;
+                                        let id = table.data.len();
+                                        this.push_proc(
+                                            Proc::random_data(
+                                                id,
+                                                &global_available,
+                                                &total_resources,
+                                            ),
+                                            cx,
+                                        );
+                                    })),
+                            )
+                            .child(
+                                div()
+                                    .child(self.alert.clone())
+                                    .when(self.run, |d| d.invisible()),
+                            )
+                            .child(
+                                div()
+                                    .ml_6()
+                                    .text_xl()
+                                    .font_weight(gpui::FontWeight::BOLD)
+                                    .child(format!("Global Available: {:?}", global_available)),
+                            )
+                            .child(
+                                div()
+                                    .child(
+                                        Popover::new("global_available")
+                                            .trigger(
+                                                Button::new("global_available_btn")
+                                                    .outline()
+                                                    .icon(IconName::Settings)
+                                                    .label("Modify"),
+                                            )
+                                            .open(self.form_popover_open)
+                                            .on_open_change(cx.listener(|this, open, _, cx| {
+                                                this.form_popover_open = *open;
+                                                cx.notify();
+                                            }))
+                                            .child(self.form.clone()),
+                                    )
+                                    .when(self.run, |d| d.invisible()),
+                            ),
+                    )
+                    .child(
+                        DataTable::new(&self.table)
+                            .stripe(true)
+                            .scrollbar_visible(true, true)
+                            .with_size(Size::Large),
+                    )
+                    .children(dialog_layer),
             )
             .child(
-                DataTable::new(&self.table)
-                    .stripe(true)
-                    .scrollbar_visible(true, true)
-                    .with_size(Size::Large),
+                resizable_panel().size_range(px(200.)..px(300.)).child(
+                    Stepper::new("step")
+                        .vertical()
+                        .items_center()
+                        .selected_index(0)
+                        .items(
+                            items
+                                .iter()
+                                .cloned()
+                                .map(|name| StepperItem::new().child(name)),
+                        ),
+                ),
             )
-            .children(dialog_layer)
     }
 }
