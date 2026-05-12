@@ -298,9 +298,6 @@ impl TableView {
                     cx.notify();
                 });
             }
-            form::FormEvent::Cancel => {
-                println!("Form cancelled");
-            }
             form::FormEvent::Invalid(reason) => {
                 println!("Invalid form input: {}", reason);
             }

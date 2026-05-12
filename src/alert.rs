@@ -3,9 +3,9 @@ use gpui::{
     Render, Styled, Window, div,
 };
 use gpui_component::{
-    WindowExt,
+    StyledExt, WindowExt,
     button::{Button, ButtonVariants},
-    dialog::{AlertDialog, DialogClose, DialogFooter, DialogHeader, DialogTitle},
+    dialog::{AlertDialog, DialogFooter, DialogHeader, DialogTitle},
     v_flex,
 };
 
@@ -52,24 +52,25 @@ impl Render for AlertView {
                             .child(form.clone())
                             .child(
                                 DialogFooter::new()
-                                    .child(DialogClose::new().child(
-                                        Button::new("cancel").flex_1().outline().label("Cancel"),
-                                    ))
+                                    .h_flex()
+                                    .justify_end()
+                                    .gap_3()
                                     .child(
-                                        Button::new("add")
-                                            .label("Add")
-                                            .primary()
-                                            .flex_1()
-                                            .on_click({
-                                                let form = form.clone();
-                                                move |_, window, cx| {
-                                                    form.update(cx, |f, cx| {
-                                                        f.submit(cx);
-                                                    });
-                                                    window.close_dialog(cx);
-                                                }
-                                            }),
-                                    ),
+                                        Button::new("cancel").outline().label("Cancel").on_click(
+                                            |_, window, cx| {
+                                                window.close_dialog(cx);
+                                            },
+                                        ),
+                                    )
+                                    .child(Button::new("add").label("Add").primary().on_click({
+                                        let form = form.clone();
+                                        move |_, window, cx| {
+                                            let success = form.update(cx, |f, cx| f.submit(cx));
+                                            if success {
+                                                window.close_dialog(cx);
+                                            }
+                                        }
+                                    })),
                             )
                     }),
             ),

@@ -3,7 +3,6 @@ use gpui::{
     Styled, Window,
 };
 use gpui_component::{
-    button::{Button, ButtonVariants},
     form::{field, v_form},
     h_flex,
     input::{Input, InputState},
@@ -18,7 +17,6 @@ pub enum FormEvent {
         max: [usize; RESOURCE_COUNT],
         need: [usize; RESOURCE_COUNT],
     },
-    Cancel,
     Invalid(String),
 }
 
@@ -72,20 +70,20 @@ impl FormView {
         Ok(result)
     }
 
-    pub fn submit(&mut self, cx: &mut Context<Self>) {
+    pub fn submit(&mut self, cx: &mut Context<Self>) -> bool {
         let name = self.name_input.read(cx).value().to_string();
         if name.is_empty() {
             cx.emit(FormEvent::Invalid(
                 "Process name cannot be empty".to_string(),
             ));
-            return;
+            return false;
         }
 
         let allocation = match Self::parse_inputs(cx, &self.allocation_inputs) {
             Ok(v) => v,
             Err(e) => {
                 cx.emit(FormEvent::Invalid(format!("Allocation: {}", e)));
-                return;
+                return false;
             }
         };
 
@@ -93,7 +91,7 @@ impl FormView {
             Ok(v) => v,
             Err(e) => {
                 cx.emit(FormEvent::Invalid(format!("Max: {}", e)));
-                return;
+                return false;
             }
         };
 
@@ -101,7 +99,7 @@ impl FormView {
             Ok(v) => v,
             Err(e) => {
                 cx.emit(FormEvent::Invalid(format!("Need: {}", e)));
-                return;
+                return false;
             }
         };
 
@@ -110,7 +108,7 @@ impl FormView {
                 cx.emit(FormEvent::Invalid(
                     "Need cannot be greater than Max".to_string(),
                 ));
-                return;
+                return false;
             }
         }
 
@@ -120,10 +118,8 @@ impl FormView {
             max,
             need,
         });
-    }
 
-    fn cancel(&mut self, cx: &mut Context<Self>) {
-        cx.emit(FormEvent::Cancel);
+        true
     }
 }
 
@@ -136,7 +132,7 @@ impl Focusable for FormView {
 }
 
 impl Render for FormView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl gpui::IntoElement {
         v_form()
             .child(
                 field()
@@ -162,23 +158,6 @@ impl Render for FormView {
                     h_flex()
                         .gap_2()
                         .children(self.need_inputs.iter().map(Input::new)),
-                ),
-            )
-            .child(
-                field().label_indent(false).child(
-                    h_flex()
-                        .gap_4()
-                        .child(
-                            Button::new("submit")
-                                .primary()
-                                .child("Submit")
-                                .on_click(cx.listener(|this, _, _, cx| this.submit(cx))),
-                        )
-                        .child(
-                            Button::new("cancel")
-                                .child("Cancel")
-                                .on_click(cx.listener(|this, _, _, cx| this.cancel(cx))),
-                        ),
                 ),
             )
     }
