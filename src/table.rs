@@ -3,10 +3,11 @@ use gpui::{
     TextAlign, Window, div, prelude::FluentBuilder,
 };
 use gpui_component::{
-    ActiveTheme, IconName, Root, Sizable, Size, StyleSized, StyledExt,
+    ActiveTheme, IconName, Root, Sizable, Size, StyleSized, StyledExt, WindowExt,
     button::Button,
     h_flex,
     label::Label,
+    notification::NotificationType,
     popover::Popover,
     table::{Column, ColumnFixed, ColumnGroup, DataTable, TableDelegate, TableState},
     v_flex,
@@ -92,20 +93,15 @@ struct Table {
     columns: Vec<Column>,
     global_available: [usize; RESOURCE_COUNT],
     total_resources: [usize; RESOURCE_COUNT],
-    step_index: usize,
     finished_count: usize,
 }
 
 impl Table {
     pub fn new() -> Self {
-        let global_available = [3, 3, 2];
-        let total_resources = global_available;
-
         Self {
             data: vec![],
-            global_available,
-            total_resources,
-            step_index: 0,
+            global_available: Default::default(),
+            total_resources: Default::default(),
             finished_count: 0,
             columns: {
                 let mut cols = Vec::with_capacity(2 + 3 * RESOURCE_COUNT + 1);
@@ -147,9 +143,9 @@ impl Table {
         *self = Self::new();
     }
 
-    pub fn step(&mut self) {
+    pub fn step(&mut self) -> Result<(), ()> {
         if self.finished_count == self.data.len() {
-            return;
+            return Ok(());
         }
 
         if let Some(p) = self
@@ -160,9 +156,12 @@ impl Table {
             for j in 0..RESOURCE_COUNT {
                 self.global_available[j] += p.allocation[j];
             }
-            self.step_index += 1;
+            self.finished_count += 1;
             p.finish = true;
+            return Ok(());
         }
+
+        Err(())
     }
 
     fn render_value_cell(&self, col: &Column, val: usize, idx: usize, cx: &mut App) -> AnyElement {
@@ -278,6 +277,7 @@ pub struct TableView {
     alert: Entity<alert::AlertView>,
     form: Entity<ResForm>,
     pub form_popover_open: bool,
+    pub run: bool,
 }
 
 impl TableView {
@@ -308,6 +308,7 @@ impl TableView {
             alert,
             form_popover_open: false,
             form,
+            run: false,
         }
     }
 
@@ -316,9 +317,8 @@ impl TableView {
             let delegate = table.delegate_mut();
 
             for i in 0..RESOURCE_COUNT {
-                if delegate.global_available[i] >= data.allocation[i] {
-                    delegate.global_available[i] -= data.allocation[i];
-                }
+                delegate.global_available[i] =
+                    delegate.global_available[i].saturating_sub(data.allocation[i]);
             }
 
             delegate.data.push(Data {
@@ -343,14 +343,18 @@ impl TableView {
         });
     }
 
-    fn on_step(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+    fn on_step(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.run = true;
         self.table.update(cx, |table, cx| {
-            table.delegate_mut().step();
+            if table.delegate_mut().step().is_err() {
+                window.push_notification((NotificationType::Error, "Deadlock detected"), cx);
+            }
             cx.notify();
         });
     }
 
     fn on_reset(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        self.run = false;
         self.table.update(cx, |table, cx| {
             table.delegate_mut().reset();
             cx.notify();
@@ -406,7 +410,11 @@ impl Render for TableView {
                                 );
                             })),
                     )
-                    .child(self.alert.clone())
+                    .child(
+                        div()
+                            .child(self.alert.clone())
+                            .when(self.run, |d| d.invisible()),
+                    )
                     .child(
                         div()
                             .ml_6()
@@ -415,18 +423,22 @@ impl Render for TableView {
                             .child(format!("Global Available: {:?}", global_available)),
                     )
                     .child(
-                        Popover::new("global_available")
-                            .trigger(
-                                Button::new("global_available_btn")
-                                    .outline()
-                                    .label("Modify"),
+                        div()
+                            .child(
+                                Popover::new("global_available")
+                                    .trigger(
+                                        Button::new("global_available_btn")
+                                            .outline()
+                                            .label("Modify"),
+                                    )
+                                    .open(self.form_popover_open)
+                                    .on_open_change(cx.listener(|this, open, _, cx| {
+                                        this.form_popover_open = *open;
+                                        cx.notify();
+                                    }))
+                                    .child(self.form.clone()),
                             )
-                            .open(self.form_popover_open)
-                            .on_open_change(cx.listener(|this, open, _, cx| {
-                                this.form_popover_open = *open;
-                                cx.notify();
-                            }))
-                            .child(self.form.clone()),
+                            .when(self.run, |d| d.invisible()),
                     ),
             )
             .child(
