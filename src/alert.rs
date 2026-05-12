@@ -3,9 +3,10 @@ use gpui::{
     Render, Styled, Window, div,
 };
 use gpui_component::{
-    StyledExt, WindowExt,
+    IconName, StyledExt, WindowExt,
     button::{Button, ButtonVariants},
     dialog::{AlertDialog, DialogFooter, DialogHeader, DialogTitle},
+    notification::NotificationType,
     v_flex,
 };
 
@@ -13,15 +14,15 @@ use crate::form;
 
 pub struct AlertView {
     focus_handle: FocusHandle,
-    form: Entity<form::FormView>,
+    form: Entity<form::DataForm>,
 }
 
 impl AlertView {
-    pub fn view(form: Entity<form::FormView>, window: &mut Window, cx: &mut App) -> Entity<Self> {
+    pub fn view(form: Entity<form::DataForm>, window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(form, window, cx))
     }
 
-    pub fn new(form: Entity<form::FormView>, _window: &mut Window, cx: &mut App) -> Self {
+    pub fn new(form: Entity<form::DataForm>, _window: &mut Window, cx: &mut App) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
             form,
@@ -42,7 +43,12 @@ impl Render for AlertView {
         div().track_focus(&self.focus_handle).child(
             v_flex().gap_6().child(
                 AlertDialog::new(cx)
-                    .trigger(Button::new("show-alert").outline().label("Add"))
+                    .trigger(
+                        Button::new("show-alert")
+                            .outline()
+                            .icon(IconName::Plus)
+                            .label("Add"),
+                    )
                     .content(move |content, _window, _cx| {
                         content
                             .child(
@@ -65,8 +71,13 @@ impl Render for AlertView {
                                     .child(Button::new("add").label("Add").primary().on_click({
                                         let form = form.clone();
                                         move |_, window, cx| {
-                                            let success = form.update(cx, |f, cx| f.submit(cx));
-                                            if success {
+                                            let res = form.update(cx, |f, cx| f.submit(cx));
+                                            if let Err(err) = res {
+                                                window.push_notification(
+                                                    (NotificationType::Error, err),
+                                                    cx,
+                                                );
+                                            } else {
                                                 window.close_dialog(cx);
                                             }
                                         }

@@ -1,21 +1,24 @@
 use gpui::{
     App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, ParentElement, Render,
-    Styled, Window,
+    SharedString, Styled, Window,
 };
 use gpui_component::{
+    WindowExt,
+    button::{Button, ButtonVariants},
     form::{field, v_form},
     h_flex,
     input::{Input, InputState},
+    notification::NotificationType,
+    v_flex,
 };
 
-use crate::table::{Proc, RESOURCE_COUNT};
+use crate::table::{self, Proc, RESOURCE_COUNT};
 
 pub enum FormEvent {
     Submit(Vec<Proc>),
-    Invalid(String),
 }
 
-pub struct FormView {
+pub struct DataForm {
     focus_handle: FocusHandle,
     name_input: Entity<InputState>,
     allocation_inputs: [Entity<InputState>; RESOURCE_COUNT],
@@ -23,7 +26,13 @@ pub struct FormView {
     need_inputs: [Entity<InputState>; RESOURCE_COUNT],
 }
 
-impl FormView {
+pub struct ResForm {
+    focus_handle: FocusHandle,
+    parent: Entity<table::TableView>,
+    res_inputs: [Entity<InputState>; RESOURCE_COUNT],
+}
+
+impl DataForm {
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(window, cx))
     }
@@ -65,45 +74,36 @@ impl FormView {
         Ok(result)
     }
 
-    pub fn submit(&mut self, cx: &mut Context<Self>) -> bool {
+    pub fn submit(&mut self, cx: &mut Context<Self>) -> Result<(), SharedString> {
         let name = self.name_input.read(cx).value().to_string();
         if name.is_empty() {
-            cx.emit(FormEvent::Invalid(
-                "Process name cannot be empty".to_string(),
-            ));
-            return false;
+            return Err("Process name cannot be empty".into());
         }
 
         let allocation = match Self::parse_inputs(cx, &self.allocation_inputs) {
             Ok(v) => v,
             Err(e) => {
-                cx.emit(FormEvent::Invalid(format!("Allocation: {}", e)));
-                return false;
+                return Err(format!("Allocation: {}", e).into());
             }
         };
 
         let max = match Self::parse_inputs(cx, &self.max_inputs) {
             Ok(v) => v,
             Err(e) => {
-                cx.emit(FormEvent::Invalid(format!("Max: {}", e)));
-                return false;
+                return Err(format!("Max: {}", e).into());
             }
         };
 
         let need = match Self::parse_inputs(cx, &self.need_inputs) {
             Ok(v) => v,
             Err(e) => {
-                cx.emit(FormEvent::Invalid(format!("Need: {}", e)));
-                return false;
+                return Err(format!("Need: {}", e).into());
             }
         };
 
         for i in 0..RESOURCE_COUNT {
             if need[i] > max[i] {
-                cx.emit(FormEvent::Invalid(
-                    "Need cannot be greater than Max".to_string(),
-                ));
-                return false;
+                return Err("Need cannot be greater than Max".into());
             }
         }
 
@@ -114,19 +114,75 @@ impl FormView {
             need,
         }]));
 
-        true
+        Ok(())
     }
 }
 
-impl EventEmitter<FormEvent> for FormView {}
+impl ResForm {
+    pub fn view(
+        parent: Entity<table::TableView>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Entity<Self> {
+        cx.new(|cx| Self::new(parent, window, cx))
+    }
 
-impl Focusable for FormView {
+    fn new(parent: Entity<table::TableView>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let res_inputs =
+            std::array::from_fn(|_| cx.new(|cx| InputState::new(window, cx).placeholder("0")));
+
+        Self {
+            focus_handle: cx.focus_handle(),
+            parent,
+            res_inputs,
+        }
+    }
+
+    fn parse_inputs(
+        cx: &Context<Self>,
+        inputs: &[Entity<InputState>; RESOURCE_COUNT],
+    ) -> Result<[usize; RESOURCE_COUNT], &'static str> {
+        let mut result = [0; RESOURCE_COUNT];
+        for i in 0..RESOURCE_COUNT {
+            let val = inputs[i].read(cx).value();
+            if val.is_empty() {
+                return Err("Inputs cannot be empty");
+            }
+            match val.parse::<usize>() {
+                Ok(v) => result[i] = v,
+                Err(_) => return Err("Inputs must be positive numbers"),
+            }
+        }
+        Ok(result)
+    }
+
+    pub fn submit(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> Result<[usize; RESOURCE_COUNT], SharedString> {
+        match Self::parse_inputs(cx, &self.res_inputs) {
+            Ok(v) => Ok(v),
+            Err(e) => Err(e.into()),
+        }
+    }
+}
+
+impl EventEmitter<FormEvent> for DataForm {}
+impl EventEmitter<FormEvent> for ResForm {}
+
+impl Focusable for DataForm {
     fn focus_handle(&self, _cx: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
 
-impl Render for FormView {
+impl Focusable for ResForm {
+    fn focus_handle(&self, _cx: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+
+impl Render for DataForm {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl gpui::IntoElement {
         v_form()
             .child(
@@ -153,6 +209,42 @@ impl Render for FormView {
                     h_flex()
                         .gap_2()
                         .children(self.need_inputs.iter().map(Input::new)),
+                ),
+            )
+    }
+}
+
+impl Render for ResForm {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
+        let parent = self.parent.clone();
+
+        v_form()
+            .h_full()
+            .child(
+                field().label("Allocation").child(
+                    v_flex()
+                        .gap_2()
+                        .children(self.res_inputs.iter().map(Input::new)),
+                ),
+            )
+            .child(
+                field().label_indent(false).child(
+                    Button::new("gl_submit")
+                        .label("Modify")
+                        .primary()
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            let res = this.submit(cx);
+                            match res {
+                                Ok(data) => parent.update(cx, |this, cx| {
+                                    this.form_popover_open = false;
+                                    this.modify_global_res(data, cx);
+                                    cx.notify();
+                                }),
+                                Err(e) => {
+                                    window.push_notification((NotificationType::Error, e), cx)
+                                }
+                            }
+                        })),
                 ),
             )
     }

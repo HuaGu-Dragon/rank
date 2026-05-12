@@ -13,7 +13,9 @@ pub struct Example {
 }
 
 impl Render for Example {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let notification_layer = Root::render_notification_layer(window, cx);
+
         v_flex()
             .size_full()
             .child(
@@ -35,6 +37,7 @@ impl Render for Example {
                     .justify_center()
                     .child(self.table.clone()),
             )
+            .children(notification_layer)
     }
 }
 

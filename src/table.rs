@@ -3,16 +3,20 @@ use gpui::{
     TextAlign, Window, div, prelude::FluentBuilder,
 };
 use gpui_component::{
-    ActiveTheme, Root, Sizable, Size, StyleSized, StyledExt,
+    ActiveTheme, IconName, Root, Sizable, Size, StyleSized, StyledExt,
     button::Button,
     h_flex,
     label::Label,
+    popover::Popover,
     table::{Column, ColumnFixed, ColumnGroup, DataTable, TableDelegate, TableState},
     v_flex,
 };
 use rand::RngExt;
 
-use crate::{alert, form};
+use crate::{
+    alert,
+    form::{self, ResForm},
+};
 
 macro_rules! pass_nproc {
     ($mac:ident) => {
@@ -272,6 +276,8 @@ impl TableDelegate for Table {
 pub struct TableView {
     table: Entity<TableState<Table>>,
     alert: Entity<alert::AlertView>,
+    form: Entity<ResForm>,
+    pub form_popover_open: bool,
 }
 
 impl TableView {
@@ -283,7 +289,7 @@ impl TableView {
         let delegate = Table::new();
         let table = cx.new(|cx| TableState::new(delegate, window, cx));
 
-        let form = form::FormView::view(window, cx);
+        let form = form::DataForm::view(window, cx);
 
         let alert = alert::AlertView::view(form.clone(), window, cx);
 
@@ -292,13 +298,17 @@ impl TableView {
                 proc.iter()
                     .for_each(|data| this.push_proc(data.clone(), cx));
             }
-            form::FormEvent::Invalid(reason) => {
-                println!("Invalid form input: {}", reason);
-            }
         })
         .detach();
 
-        Self { table, alert }
+        let form = ResForm::view(cx.entity(), window, cx);
+
+        Self {
+            table,
+            alert,
+            form_popover_open: false,
+            form,
+        }
     }
 
     fn push_proc(&mut self, data: Proc, cx: &mut Context<Self>) {
@@ -319,6 +329,16 @@ impl TableView {
                 need: data.need,
                 finish: false,
             });
+            cx.notify();
+        });
+    }
+
+    pub fn modify_global_res(&mut self, res: [usize; RESOURCE_COUNT], cx: &mut Context<Self>) {
+        self.table.update(cx, |table, cx| {
+            let table = table.delegate_mut();
+
+            table.total_resources = res;
+            table.global_available = res;
             cx.notify();
         });
     }
@@ -356,13 +376,17 @@ impl Render for TableView {
                 h_flex()
                     .gap_4()
                     .items_center()
-                    .child(Button::new("step_btn").label("Step").on_click(cx.listener(
-                        |this, _ev, window, cx| {
-                            this.on_step(window, cx);
-                        },
-                    )))
+                    .child(
+                        Button::new("step_btn")
+                            .icon(IconName::Play)
+                            .label("Step")
+                            .on_click(cx.listener(|this, _ev, window, cx| {
+                                this.on_step(window, cx);
+                            })),
+                    )
                     .child(
                         Button::new("reset_btn")
+                            .icon(IconName::Undo)
                             .label("Reset")
                             .on_click(cx.listener(|this, _ev, window, cx| {
                                 this.on_reset(window, cx);
@@ -370,6 +394,7 @@ impl Render for TableView {
                     )
                     .child(
                         Button::new("rand")
+                            .icon(IconName::Cpu)
                             .label("Random Gen")
                             .on_click(cx.listener(move |this, _ev, _window, cx| {
                                 let table = this.table.read(cx).delegate();
@@ -388,6 +413,20 @@ impl Render for TableView {
                             .text_xl()
                             .font_weight(gpui::FontWeight::BOLD)
                             .child(format!("Global Available: {:?}", global_available)),
+                    )
+                    .child(
+                        Popover::new("global_available")
+                            .trigger(
+                                Button::new("global_available_btn")
+                                    .outline()
+                                    .label("Modify"),
+                            )
+                            .open(self.form_popover_open)
+                            .on_open_change(cx.listener(|this, open, _, cx| {
+                                this.form_popover_open = *open;
+                                cx.notify();
+                            }))
+                            .child(self.form.clone()),
                     ),
             )
             .child(
