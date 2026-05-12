@@ -13,6 +13,7 @@ use gpui_component::{
     scroll::ScrollableElement,
     stepper::{Stepper, StepperItem},
     table::{Column, ColumnFixed, ColumnGroup, DataTable, TableDelegate, TableState},
+    v_flex,
 };
 
 use rand::RngExt;
@@ -467,15 +468,14 @@ impl Render for TableView {
                     .children(dialog_layer),
             )
             .child(
-                resizable_panel().size_range(px(200.)..px(300.)).child(
+                resizable_panel().size_range(px(100.)..px(150.)).child(
                     div().overflow_y_scrollbar().size_full().p_10().child(
                         Stepper::new("step")
                             .vertical()
-                            .items_center()
                             .selected_index(finished.saturating_sub(1))
                             .items(items.iter().cloned().map(|name| {
                                 StepperItem::new()
-                                    .child(div().items_center().child(name).h_40())
+                                    .child(v_flex().items_center().child(name).h_40())
                                     .icon(IconName::Cpu)
                             })),
                     ),
