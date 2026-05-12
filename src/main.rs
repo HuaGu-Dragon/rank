@@ -31,7 +31,7 @@ impl Render for Example {
             .child(
                 div()
                     .id("window-body")
-                    .p_5()
+                    .p_10()
                     .size_full()
                     .items_center()
                     .justify_center()

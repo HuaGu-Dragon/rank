@@ -10,6 +10,7 @@ use gpui_component::{
     notification::NotificationType,
     popover::Popover,
     resizable::{h_resizable, resizable_panel},
+    scroll::ScrollableElement,
     stepper::{Stepper, StepperItem},
     table::{Column, ColumnFixed, ColumnGroup, DataTable, TableDelegate, TableState},
 };
@@ -377,6 +378,7 @@ impl Render for TableView {
         let table = self.table.read(cx).delegate();
         let global_available = table.global_available;
         let items = &table.finished_order;
+        let finished = table.finished_count;
 
         h_resizable("layout")
             .child(
@@ -466,16 +468,17 @@ impl Render for TableView {
             )
             .child(
                 resizable_panel().size_range(px(200.)..px(300.)).child(
-                    Stepper::new("step")
-                        .vertical()
-                        .items_center()
-                        .selected_index(0)
-                        .items(
-                            items
-                                .iter()
-                                .cloned()
-                                .map(|name| StepperItem::new().child(name)),
-                        ),
+                    div().overflow_y_scrollbar().size_full().p_10().child(
+                        Stepper::new("step")
+                            .vertical()
+                            .items_center()
+                            .selected_index(finished.saturating_sub(1))
+                            .items(items.iter().cloned().map(|name| {
+                                StepperItem::new()
+                                    .child(div().items_center().child(name).h_40())
+                                    .icon(IconName::Cpu)
+                            })),
+                    ),
                 ),
             )
     }
