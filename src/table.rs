@@ -39,11 +39,11 @@ pub const RESOURCE_COUNT: usize = pass_nproc!(literal_identity_macro);
 #[derive(Clone)]
 pub struct Data {
     pub id: usize,
-    name: String,
+    pub name: String,
     pub allocation: [usize; RESOURCE_COUNT],
-    max: [usize; RESOURCE_COUNT],
+    pub max: [usize; RESOURCE_COUNT],
     pub need: [usize; RESOURCE_COUNT],
-    finish: bool,
+    pub finish: bool,
 }
 
 #[derive(Clone)]
