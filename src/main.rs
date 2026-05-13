@@ -2,6 +2,7 @@ use gpui::*;
 use gpui_component::{Root, TitleBar, h_flex, menu::AppMenuBar, v_flex};
 
 pub mod alert;
+pub mod algo;
 pub mod form;
 mod menu;
 pub mod table;

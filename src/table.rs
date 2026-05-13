@@ -1,13 +1,12 @@
 use gpui::{
-    AnyElement, App, AppContext, Context, Entity, IntoElement, ParentElement, Render, Styled,
-    TextAlign, Window, div, prelude::FluentBuilder, px,
+    AnyElement, App, AppContext, Context, Entity, IntoElement, ParentElement, Render, SharedString,
+    Styled, TextAlign, Window, div, prelude::FluentBuilder, px,
 };
 use gpui_component::{
-    ActiveTheme, IconName, Root, Sizable, Size, StyleSized, StyledExt, WindowExt,
+    ActiveTheme, IconName, Root, Sizable, Size, StyleSized, StyledExt,
     button::Button,
     h_flex,
     label::Label,
-    notification::NotificationType,
     popover::Popover,
     resizable::{h_resizable, resizable_panel},
     scroll::ScrollableElement,
@@ -19,7 +18,7 @@ use gpui_component::{
 use rand::RngExt;
 
 use crate::{
-    alert,
+    alert, algo,
     form::{self, ResForm},
 };
 
@@ -37,12 +36,13 @@ macro_rules! literal_identity_macro {
 
 pub const RESOURCE_COUNT: usize = pass_nproc!(literal_identity_macro);
 
-struct Data {
-    id: usize,
+#[derive(Clone)]
+pub struct Data {
+    pub id: usize,
     name: String,
-    allocation: [usize; RESOURCE_COUNT],
+    pub allocation: [usize; RESOURCE_COUNT],
     max: [usize; RESOURCE_COUNT],
-    need: [usize; RESOURCE_COUNT],
+    pub need: [usize; RESOURCE_COUNT],
     finish: bool,
 }
 
@@ -98,7 +98,7 @@ struct Table {
     global_available: [usize; RESOURCE_COUNT],
     total_resources: [usize; RESOURCE_COUNT],
     finished_count: usize,
-    finished_order: Vec<String>,
+    safe_sequence: Vec<Data>,
 }
 
 impl Table {
@@ -108,7 +108,7 @@ impl Table {
             global_available: Default::default(),
             total_resources: Default::default(),
             finished_count: 0,
-            finished_order: vec![],
+            safe_sequence: vec![],
             columns: {
                 let mut cols = Vec::with_capacity(2 + 3 * RESOURCE_COUNT + 1);
 
@@ -149,26 +149,20 @@ impl Table {
         *self = Self::new();
     }
 
-    pub fn step(&mut self) -> Result<(), ()> {
+    pub fn step(&mut self) {
         if self.finished_count == self.data.len() {
-            return Ok(());
+            return;
         }
 
         if let Some(p) = self
             .data
             .iter_mut()
-            .find(|p| !p.finish && p.need <= self.global_available)
+            .find(|p| p.id == self.safe_sequence[self.finished_count].id)
         {
-            for j in 0..RESOURCE_COUNT {
-                self.global_available[j] += p.allocation[j];
-            }
-            self.finished_count += 1;
             p.finish = true;
-            self.finished_order.push(p.name.clone());
-            return Ok(());
+            self.finished_count += 1;
+            (0..RESOURCE_COUNT).for_each(|i| self.global_available[i] += p.allocation[i]);
         }
-
-        Err(())
     }
 
     fn render_value_cell(&self, col: &Column, val: usize, idx: usize, cx: &mut App) -> AnyElement {
@@ -352,17 +346,9 @@ impl TableView {
         let delegate = Table::new();
         let table = cx.new(|cx| TableState::new(delegate, window, cx));
 
-        let form = form::DataForm::view(window, cx);
+        let form = form::DataForm::view(cx.entity(), window, cx);
 
-        let alert = alert::AlertView::view(form.clone(), window, cx);
-
-        cx.subscribe(&form, |this, _emitter, ev: &form::FormEvent, cx| match ev {
-            form::FormEvent::Submit(proc) => {
-                proc.iter()
-                    .for_each(|data| this.push_proc(data.clone(), cx));
-            }
-        })
-        .detach();
+        let alert = alert::AlertView::view(form, window, cx);
 
         let form = ResForm::view(cx.entity(), window, cx);
 
@@ -375,25 +361,42 @@ impl TableView {
         }
     }
 
-    fn push_proc(&mut self, data: Proc, cx: &mut Context<Self>) {
+    pub fn push_proc(&mut self, data: Proc, cx: &mut Context<Self>) -> Result<(), SharedString> {
         self.table.update(cx, |table, cx| {
             let delegate = table.delegate_mut();
 
             for i in 0..RESOURCE_COUNT {
-                delegate.global_available[i] =
-                    delegate.global_available[i].saturating_sub(data.allocation[i]);
+                if data.allocation[i] > delegate.global_available[i] {
+                    return Err("Not enough resources".into());
+                }
             }
 
-            delegate.data.push(Data {
+            let cur = std::array::from_fn(|i| delegate.global_available[i] - data.allocation[i]);
+            let data = Data {
                 id: delegate.data.len(),
                 name: data.name,
                 allocation: data.allocation,
                 max: data.max,
                 need: data.need,
                 finish: false,
-            });
+            };
+
+            // TODO: use tmp buffer to avoid cloning
+            let mut safe = delegate.safe_sequence.clone();
+            safe.push(data.clone());
+
+            if algo::check_safety(&mut safe, &cur) {
+                delegate.safe_sequence = safe;
+                delegate.global_available = cur;
+                delegate.data.push(data);
+            } else {
+                return Err("Deadlock detected! Could not allocate resources".into());
+            }
+
             cx.notify();
-        });
+
+            Ok(())
+        })
     }
 
     pub fn modify_global_res(&mut self, res: [usize; RESOURCE_COUNT], cx: &mut Context<Self>) {
@@ -406,12 +409,10 @@ impl TableView {
         });
     }
 
-    fn on_step(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_step(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         self.run = true;
         self.table.update(cx, |table, cx| {
-            if table.delegate_mut().step().is_err() {
-                window.push_notification((NotificationType::Error, "Deadlock detected"), cx);
-            }
+            table.delegate_mut().step();
             cx.notify();
         });
     }
@@ -434,7 +435,7 @@ impl Render for TableView {
         let dialog_layer = Root::render_dialog_layer(window, cx);
         let table = self.table.read(cx).delegate();
         let global_available = table.global_available;
-        let items = &table.finished_order;
+        let items = &table.safe_sequence;
         let finished = table.finished_count;
 
         h_resizable("layout")
@@ -469,11 +470,12 @@ impl Render for TableView {
                                 Button::new("rand")
                                     .icon(IconName::Cpu)
                                     .label("Random Gen")
-                                    .on_click(cx.listener(move |this, _ev, _window, cx| {
+                                    .on_click(cx.listener(|this, _ev, _window, cx| {
                                         let table = this.table.read(cx).delegate();
                                         let total_resources = table.total_resources;
                                         let id = table.data.len();
-                                        this.push_proc(
+                                        let global_available = table.global_available;
+                                        let _ = this.push_proc(
                                             Proc::random_data(
                                                 id,
                                                 &global_available,
@@ -529,9 +531,9 @@ impl Render for TableView {
                         Stepper::new("step")
                             .vertical()
                             .selected_index(finished.saturating_sub(1))
-                            .items(items.iter().cloned().map(|name| {
+                            .items(items.iter().cloned().map(|p| {
                                 StepperItem::new()
-                                    .child(v_flex().items_center().child(name).h_40())
+                                    .child(v_flex().items_center().child(p.name).h_40())
                                     .icon(IconName::Cpu)
                             })),
                     ),

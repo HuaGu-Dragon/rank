@@ -1,6 +1,6 @@
 use gpui::{
-    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, ParentElement, Render,
-    SharedString, Styled, Window,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, ParentElement, Render, SharedString,
+    Styled, Window,
 };
 use gpui_component::{
     WindowExt,
@@ -14,12 +14,9 @@ use gpui_component::{
 
 use crate::table::{self, Proc, RESOURCE_COUNT};
 
-pub enum FormEvent {
-    Submit(Vec<Proc>),
-}
-
 pub struct DataForm {
     focus_handle: FocusHandle,
+    parent: Entity<table::TableView>,
     name_input: Entity<InputState>,
     allocation_inputs: [Entity<InputState>; RESOURCE_COUNT],
     max_inputs: [Entity<InputState>; RESOURCE_COUNT],
@@ -32,11 +29,15 @@ pub struct ResForm {
 }
 
 impl DataForm {
-    pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
-        cx.new(|cx| Self::new(window, cx))
+    pub fn view(
+        parent: Entity<table::TableView>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Entity<Self> {
+        cx.new(|cx| Self::new(parent, window, cx))
     }
 
-    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(parent: Entity<table::TableView>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let name_input = cx.new(|cx| InputState::new(window, cx));
 
         let allocation_inputs =
@@ -46,6 +47,7 @@ impl DataForm {
 
         Self {
             focus_handle: cx.focus_handle(),
+            parent,
             name_input,
             allocation_inputs,
             max_inputs,
@@ -98,14 +100,17 @@ impl DataForm {
 
         let need = std::array::from_fn(|i| max[i] - allocation[i]);
 
-        cx.emit(FormEvent::Submit(vec![Proc {
-            name,
-            allocation,
-            max,
-            need,
-        }]));
-
-        Ok(())
+        self.parent.update(cx, |this, cx| {
+            this.push_proc(
+                Proc {
+                    name,
+                    allocation,
+                    max,
+                    need,
+                },
+                cx,
+            )
+        })
     }
 }
 
@@ -157,9 +162,6 @@ impl ResForm {
         }
     }
 }
-
-impl EventEmitter<FormEvent> for DataForm {}
-impl EventEmitter<FormEvent> for ResForm {}
 
 impl Focusable for DataForm {
     fn focus_handle(&self, _cx: &App) -> FocusHandle {
