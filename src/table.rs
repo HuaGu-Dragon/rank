@@ -507,7 +507,8 @@ impl Render for TableView {
                                             Proc::random_data(id, &global_available),
                                             cx,
                                         );
-                                    })),
+                                    }))
+                                    .when(self.run, |b| b.invisible()),
                             )
                             .child(
                                 div()

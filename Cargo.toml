@@ -10,3 +10,11 @@ gpui-component = { git = "https://github.com/longbridge/gpui-component" }
 gpui-component-assets = { git = "https://github.com/longbridge/gpui-component" }
 seq-macro = "0.3.6"
 rand = "0.10.1"
+
+[profile.release]
+debug = "limited"
+lto = "thin"
+codegen-units = 1
+
+[profile.release.package]
+zed = { codegen-units = 16 }
