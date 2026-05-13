@@ -469,14 +469,14 @@ impl Render for TableView {
 
         h_resizable("layout")
             .child(
-                resizable_panel()
-                    .v_flex()
+                v_flex()
                     .size_full()
                     .p_6()
                     .text_lg()
                     .gap_6()
                     .child(
                         h_flex()
+                            .overflow_x_hidden()
                             .gap_4()
                             .items_center()
                             .child(
@@ -548,7 +548,8 @@ impl Render for TableView {
                             .scrollbar_visible(true, true)
                             .with_size(Size::Large),
                     )
-                    .children(dialog_layer),
+                    .children(dialog_layer)
+                    .into_any_element(),
             )
             .child(
                 resizable_panel().size_range(px(100.)..px(150.)).child(

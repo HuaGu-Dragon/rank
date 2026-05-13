@@ -1,3 +1,9 @@
+## [1.0.4] - 2026-05-14
+
+### Fixed
+- Prevent overflow in table layout
+- Prevent menu mouse events from propagating
+
 ## [1.0.3] - 2026-05-13
 
 ### Added

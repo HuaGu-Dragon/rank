@@ -31,14 +31,18 @@ impl Render for Example {
                 // Render custom title bar on top of Root view.
                 TitleBar::new().child(
                     h_flex().w_full().pr_2().justify_between().child(
-                        div().h_flex().child(self.menu.clone()).child(
-                            Button::new("github")
-                                .icon(IconName::Github)
-                                .ghost()
-                                .on_click(|_, _, cx| {
-                                    cx.open_url("https://github.com/HuaGu-Dragon/rank");
-                                }),
-                        ),
+                        div()
+                            .h_flex()
+                            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                            .child(self.menu.clone())
+                            .child(
+                                Button::new("github")
+                                    .icon(IconName::Github)
+                                    .ghost()
+                                    .on_click(|_, _, cx| {
+                                        cx.open_url("https://github.com/HuaGu-Dragon/rank");
+                                    }),
+                            ),
                     ),
                 ),
             )
