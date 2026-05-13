@@ -1,3 +1,12 @@
+## [1.0.1] - 2026-05-13
+
+### Added
+- Add themes to release
+
+### Fixed
+- fix package name
+- make the menu horizontal
+
 ## [1.0.0] - 2026-05-13
 
 ### Added

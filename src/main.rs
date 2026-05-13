@@ -1,5 +1,11 @@
 use gpui::*;
-use gpui_component::{IconName, Root, TitleBar, button::Button, h_flex, menu::AppMenuBar, v_flex};
+use gpui_component::{
+    IconName, Root, StyledExt, TitleBar,
+    button::{Button, ButtonVariants},
+    h_flex,
+    menu::AppMenuBar,
+    v_flex,
+};
 
 pub mod alert;
 pub mod algo;
@@ -23,9 +29,10 @@ impl Render for Example {
                 // Render custom title bar on top of Root view.
                 TitleBar::new().child(
                     h_flex().w_full().pr_2().justify_between().child(
-                        div().child(self.menu.clone()).child(
+                        div().h_flex().child(self.menu.clone()).child(
                             Button::new("github")
                                 .icon(IconName::Github)
+                                .ghost()
                                 .on_click(|_, _, cx| {
                                     cx.open_url("https://github.com/HuaGu-Dragon/rank");
                                 }),

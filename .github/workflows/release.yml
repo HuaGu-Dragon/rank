@@ -46,7 +46,7 @@ jobs:
                   leading-dir: true
                   # (optional) Comma-separated list of additional files to be included to archive.
                   # Note that glob pattern is not supported yet.
-                  # include: LICENSE, README.md
+                  include: LICENSE, README.md, ./themes
               env:
                   # (required) GitHub token for uploading assets to GitHub Releases.
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

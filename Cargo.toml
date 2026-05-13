@@ -17,4 +17,4 @@ lto = "thin"
 codegen-units = 1
 
 [profile.release.package]
-zed = { codegen-units = 16 }
+rank = { codegen-units = 16 }
