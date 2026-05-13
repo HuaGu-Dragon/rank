@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use gpui::*;
 use gpui_component::{
     IconName, Root, StyledExt, TitleBar,

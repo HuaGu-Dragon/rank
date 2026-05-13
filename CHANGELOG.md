@@ -1,3 +1,10 @@
+## [1.0.3] - 2026-05-13
+
+### Added
+- Support for both Wayland and X11 windowing systems.
+- Remove terminal in windows when running as a GUI application.
+- Performance improvements, use `codegen_util = 1`.
+
 ## [1.0.2] - 2026-05-13
 
 ### Added
