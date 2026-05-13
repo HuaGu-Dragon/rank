@@ -31,3 +31,13 @@ cargo run --release
 - `src/algo.rs`: Core logic for the Banker's Algorithm.
 - `src/table.rs`: UI rendering of the resource table.
 - `src/form.rs`: User inputs for new processes and resources.
+
+
+## Dependencies
+
+- **gpui**: High-performance UI framework for Rust.
+- **gpui-component**: UI components for the GPUI framework.
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
