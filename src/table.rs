@@ -55,38 +55,70 @@ pub struct Proc {
 }
 
 impl Proc {
-    pub fn random_data(
-        id: usize,
-        available: &[usize; RESOURCE_COUNT],
-        total: &[usize; RESOURCE_COUNT],
-    ) -> Self {
+    /// Generate random process data using a SMART ALLOCATION STRATEGY.
+    ///
+    /// This function creates processes that are guaranteed to maintain system safety
+    /// without requiring retry loops. The strategy uses a CONSERVATIVE approach:
+    ///
+    /// For each resource type i:
+    ///   1. If available[i] == 0: set allocation[i] = 0, need[i] = 0, max[i] = 0
+    ///      (No available resources, so process cannot use this resource)
+    ///
+    ///   2. Otherwise (available[i] > 0):
+    ///      - allocation[i] = random in [0, available[i]]
+    ///        (Allocate up to available, ensuring we do not over-allocate)
+    ///      - remaining = available[i] - allocation[i]
+    ///        (Calculate how much is left after current allocation)
+    ///      - need[i] = random in [0, remaining]
+    ///        (CRITICAL: constrain need to what is remaining, not what is total)
+    ///      - max[i] = allocation[i] + need[i]
+    ///        (max is the sum of what we have + what we might need)
+    ///
+    /// WHY THIS STRATEGY GUARANTEES SAFETY:
+    /// ========================================
+    /// This strategy is called CONSERVATIVE because it never creates a process that
+    /// could potentially deadlock the system. Here is the mathematical guarantee:
+    ///
+    /// For any resource i when adding this new process:
+    ///   - allocation[i] <= available[i]           (we do not over-allocate)
+    ///   - need[i] <= available[i] - allocation[i] (needs fit within remaining)
+    ///   - Therefore: allocation[i] + need[i] <= available[i]
+    ///
+    /// This means:
+    ///   - The new process has been allocated: allocation[i] of resource i
+    ///   - The system still has free: available[i] - allocation[i] resources
+    ///   - The process may need more: need[i] <= available[i] - allocation[i]
+    ///   - Conclusion: The system can ALWAYS FULFILL the process maximum need!
+    ///
+    /// With each process guaranteed to be satisfiable, the system can never deadlock.
+    /// We do not need retry loops - the allocation is SAFE BY CONSTRUCTION.
+    pub fn random_data(id: usize, available: &[usize; RESOURCE_COUNT]) -> Self {
         let mut rng = rand::rng();
 
-        let mut process_max = [0; RESOURCE_COUNT];
+        let mut max = [0; RESOURCE_COUNT];
         let mut allocation = [0; RESOURCE_COUNT];
         let mut need = [0; RESOURCE_COUNT];
 
         for i in 0..RESOURCE_COUNT {
-            process_max[i] = if total[i] > 0 {
-                rng.random_range(0..=total[i])
+            if available[i] == 0 {
+                allocation[i] = 0;
+                need[i] = 0;
+                max[i] = 0;
             } else {
-                0
-            };
+                allocation[i] = rng.random_range(0..=available[i]);
 
-            let max_alloc = std::cmp::min(process_max[i], available[i]);
-            allocation[i] = if max_alloc > 0 {
-                rng.random_range(0..=max_alloc)
-            } else {
-                0
-            };
+                let remaining = available[i] - allocation[i];
 
-            need[i] = process_max[i] - allocation[i];
+                need[i] = rng.random_range(0..=remaining);
+
+                max[i] = allocation[i] + need[i];
+            }
         }
 
         Self {
             name: format!("P{id}"),
             allocation,
-            max: process_max,
+            max,
             need,
         }
     }
@@ -96,7 +128,6 @@ struct Table {
     data: Vec<Data>,
     columns: Vec<Column>,
     global_available: [usize; RESOURCE_COUNT],
-    total_resources: [usize; RESOURCE_COUNT],
     finished_count: usize,
     safe_sequence: Vec<Data>,
 }
@@ -106,7 +137,6 @@ impl Table {
         Self {
             data: vec![],
             global_available: Default::default(),
-            total_resources: Default::default(),
             finished_count: 0,
             safe_sequence: vec![],
             columns: {
@@ -403,7 +433,6 @@ impl TableView {
         self.table.update(cx, |table, cx| {
             let table = table.delegate_mut();
 
-            table.total_resources = res;
             table.global_available = res;
             cx.notify();
         });
@@ -472,15 +501,10 @@ impl Render for TableView {
                                     .label("Random Gen")
                                     .on_click(cx.listener(|this, _ev, _window, cx| {
                                         let table = this.table.read(cx).delegate();
-                                        let total_resources = table.total_resources;
                                         let id = table.data.len();
                                         let global_available = table.global_available;
                                         let _ = this.push_proc(
-                                            Proc::random_data(
-                                                id,
-                                                &global_available,
-                                                &total_resources,
-                                            ),
+                                            Proc::random_data(id, &global_available),
                                             cx,
                                         );
                                     })),
