@@ -222,9 +222,14 @@ impl Render for ResForm {
                             let res = this.submit(cx);
                             match res {
                                 Ok(data) => parent.update(cx, |this, cx| {
-                                    this.form_popover_open = false;
-                                    this.modify_global_res(data, cx);
-                                    cx.notify();
+                                    match this.modify_global_res(data, cx) {
+                                        Ok(_) => {
+                                            this.form_popover_open = false;
+                                            cx.notify();
+                                        }
+                                        Err(e) => window
+                                            .push_notification((NotificationType::Error, e), cx),
+                                    }
                                 }),
                                 Err(e) => {
                                     window.push_notification((NotificationType::Error, e), cx)

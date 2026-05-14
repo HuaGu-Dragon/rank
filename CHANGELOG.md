@@ -1,3 +1,8 @@
+## [1.0.5] - 2026-05-15
+
+### Fixed
+- Detect deadlock when modifying the global resource 
+
 ## [1.0.4] - 2026-05-14
 
 ### Fixed

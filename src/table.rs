@@ -429,13 +429,22 @@ impl TableView {
         })
     }
 
-    pub fn modify_global_res(&mut self, res: [usize; RESOURCE_COUNT], cx: &mut Context<Self>) {
+    pub fn modify_global_res(
+        &mut self,
+        res: [usize; RESOURCE_COUNT],
+        cx: &mut Context<Self>,
+    ) -> Result<(), &'static str> {
         self.table.update(cx, |table, cx| {
             let table = table.delegate_mut();
 
-            table.global_available = res;
-            cx.notify();
-        });
+            if algo::check_safety(&mut table.safe_sequence, &res) {
+                table.global_available = res;
+                cx.notify();
+                Ok(())
+            } else {
+                Err("Deadlock detected! Could not modify global resources")
+            }
+        })
     }
 
     fn on_step(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
