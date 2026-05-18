@@ -1,3 +1,8 @@
+## [1.0.6] - 2026-05-18
+
+### Fixed
+- Fix potential memory leaks
+
 ## [1.0.5] - 2026-05-15
 
 ### Fixed

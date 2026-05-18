@@ -376,11 +376,11 @@ impl TableView {
         let delegate = Table::new();
         let table = cx.new(|cx| TableState::new(delegate, window, cx));
 
-        let form = form::DataForm::view(cx.entity(), window, cx);
+        let form = form::DataForm::view(cx.weak_entity(), window, cx);
 
         let alert = alert::AlertView::view(form, window, cx);
 
-        let form = ResForm::view(cx.entity(), window, cx);
+        let form = ResForm::view(cx.weak_entity(), window, cx);
 
         Self {
             table,

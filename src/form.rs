@@ -1,6 +1,6 @@
 use gpui::{
     App, AppContext, Context, Entity, FocusHandle, Focusable, ParentElement, Render, SharedString,
-    Styled, Window,
+    Styled, WeakEntity, Window,
 };
 use gpui_component::{
     WindowExt,
@@ -16,7 +16,7 @@ use crate::table::{self, Proc, RESOURCE_COUNT};
 
 pub struct DataForm {
     focus_handle: FocusHandle,
-    parent: Entity<table::TableView>,
+    parent: WeakEntity<table::TableView>,
     name_input: Entity<InputState>,
     allocation_inputs: [Entity<InputState>; RESOURCE_COUNT],
     max_inputs: [Entity<InputState>; RESOURCE_COUNT],
@@ -24,20 +24,24 @@ pub struct DataForm {
 
 pub struct ResForm {
     focus_handle: FocusHandle,
-    parent: Entity<table::TableView>,
+    parent: WeakEntity<table::TableView>,
     res_inputs: [Entity<InputState>; RESOURCE_COUNT],
 }
 
 impl DataForm {
     pub fn view(
-        parent: Entity<table::TableView>,
+        parent: WeakEntity<table::TableView>,
         window: &mut Window,
         cx: &mut App,
     ) -> Entity<Self> {
         cx.new(|cx| Self::new(parent, window, cx))
     }
 
-    fn new(parent: Entity<table::TableView>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(
+        parent: WeakEntity<table::TableView>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let name_input = cx.new(|cx| InputState::new(window, cx));
 
         let allocation_inputs =
@@ -100,7 +104,7 @@ impl DataForm {
 
         let need = std::array::from_fn(|i| max[i] - allocation[i]);
 
-        self.parent.update(cx, |this, cx| {
+        match self.parent.update(cx, |this, cx| {
             this.push_proc(
                 Proc {
                     name,
@@ -110,20 +114,27 @@ impl DataForm {
                 },
                 cx,
             )
-        })
+        }) {
+            Ok(e) => e,
+            Err(_) => Ok(()),
+        }
     }
 }
 
 impl ResForm {
     pub fn view(
-        parent: Entity<table::TableView>,
+        parent: WeakEntity<table::TableView>,
         window: &mut Window,
         cx: &mut App,
     ) -> Entity<Self> {
         cx.new(|cx| Self::new(parent, window, cx))
     }
 
-    fn new(parent: Entity<table::TableView>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(
+        parent: WeakEntity<table::TableView>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let res_inputs =
             std::array::from_fn(|_| cx.new(|cx| InputState::new(window, cx).placeholder("0")));
 
@@ -221,16 +232,20 @@ impl Render for ResForm {
                         .on_click(cx.listener(move |this, _, window, cx| {
                             let res = this.submit(cx);
                             match res {
-                                Ok(data) => parent.update(cx, |this, cx| {
-                                    match this.modify_global_res(data, cx) {
-                                        Ok(_) => {
-                                            this.form_popover_open = false;
-                                            cx.notify();
+                                Ok(data) => {
+                                    let _ = parent.update(cx, |this, cx| {
+                                        match this.modify_global_res(data, cx) {
+                                            Ok(_) => {
+                                                this.form_popover_open = false;
+                                                cx.notify();
+                                            }
+                                            Err(e) => window.push_notification(
+                                                (NotificationType::Error, e),
+                                                cx,
+                                            ),
                                         }
-                                        Err(e) => window
-                                            .push_notification((NotificationType::Error, e), cx),
-                                    }
-                                }),
+                                    });
+                                }
                                 Err(e) => {
                                     window.push_notification((NotificationType::Error, e), cx)
                                 }
